@@ -58,7 +58,7 @@ const Navbar = () => {
       <div className={`navbar-container ${scrolled ? "scrolled" : ""}`}>
         <div className="navbar-inner">
           <Link to="/" className="brand-logo">
-            <span className="logo-text">Foodiii</span>
+            <span className="logo-text">Cloud Kitchen</span>
           </Link>
 
           <nav className="desktop-nav">

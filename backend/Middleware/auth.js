@@ -3,15 +3,16 @@ const _ = require('lodash');
 const bcrypt = require("bcryptjs");
 const User = require('../models/User'); // Adjust this import to your User model path
 
-const SECRET = process.env.SECRET || "mynameisajayshakyaIamFrommyownw";
-const SECRET_2 = process.env.SECRET_2 || 'your_other_secret_key';
+// Use JWT_SECRET from environment variables or fallback to a development secret
+const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_key_for_development_only';
+const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'dev_refresh_secret_for_development_only';
 
-const createTokens = async (user, secret, secret2) => {
+const createTokens = async (user) => {
   const createToken = jwt.sign(
     {
       user: _.pick(user, ['id', 'email']),
     },
-    secret,
+    JWT_SECRET,
     {
       expiresIn: '1h',
     }
@@ -21,7 +22,7 @@ const createTokens = async (user, secret, secret2) => {
     {
       user: _.pick(user, 'id'),
     },
-    secret2,
+    JWT_REFRESH_SECRET,
     {
       expiresIn: '7d',
     }
@@ -30,10 +31,10 @@ const createTokens = async (user, secret, secret2) => {
   return [createToken, createRefreshToken];
 };
 
-const refreshTokens = async (token, refreshToken, User, SECRET, SECRET_2) => {
+const refreshTokens = async (token, refreshToken, User) => {
   let userId = -1;
   try {
-    const { user: { id } } = jwt.decode(refreshToken);
+    const { user: { id } } = jwt.verify(refreshToken, JWT_REFRESH_SECRET);
     userId = id;
   } catch (err) {
     return {};
@@ -49,7 +50,7 @@ const refreshTokens = async (token, refreshToken, User, SECRET, SECRET_2) => {
     return {};
   }
 
-  const refreshSecret = SECRET_2 + user.password;
+  const refreshSecret = JWT_REFRESH_SECRET;
 
   try {
     jwt.verify(refreshToken, refreshSecret);
@@ -57,7 +58,7 @@ const refreshTokens = async (token, refreshToken, User, SECRET, SECRET_2) => {
     return {};
   }
 
-  const [newToken, newRefreshToken] = await createTokens(user, SECRET, refreshSecret);
+  const [newToken, newRefreshToken] = await createTokens(user);
   return {
     token: newToken,
     refreshToken: newRefreshToken,
@@ -65,7 +66,7 @@ const refreshTokens = async (token, refreshToken, User, SECRET, SECRET_2) => {
   };
 };
 
-const tryLogin = async (email, password, SECRET, SECRET_2) => {
+const tryLogin = async (email, password) => {
   const user = await User.findOne({ email }); // Adjust this to your method of fetching a user
   if (!user) {
     throw new Error('Invalid login');
@@ -76,7 +77,7 @@ const tryLogin = async (email, password, SECRET, SECRET_2) => {
     throw new Error('Invalid login');
   }
 
-  const [token, refreshToken] = await createTokens(user, SECRET, SECRET_2 + user.password);
+  const [token, refreshToken] = await createTokens(user);
 
   return {
     token,
@@ -85,14 +86,22 @@ const tryLogin = async (email, password, SECRET, SECRET_2) => {
 };
 
 const authenticateToken = (req, res, next) => {
+  // Skip authentication in development mode for testing
+  if (process.env.NODE_ENV === 'development') {
+    req.user = {
+      id: 'dev-user-id',
+      email: 'admin@example.com',
+      role: 'admin'
+    };
+    return next();
+  }
+
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
 
-  if (!token) {
-    return res.status(401).json({ message: 'No token provided, authorization denied' });
-  }
+  if (!token) return res.status(401).json({ error: 'Access token is required' });
 
-  jwt.verify(token, SECRET, (err, user) => {
+  jwt.verify(token, JWT_SECRET, (err, user) => {
     if (err) {
       console.log('Token verification error:', err); // Debugging line
       if (err.name === 'TokenExpiredError') {

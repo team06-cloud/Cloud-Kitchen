@@ -3,6 +3,8 @@ const dotenv = require("dotenv");
 
 dotenv.config({});
 
+let dbConnection = null;
+
 const connectDb = async () => {
   try {
     await mongoose.connect(process.env.db_string, {
@@ -11,11 +13,15 @@ const connectDb = async () => {
     });
 
     console.log("Connected to MongoDB successfully");
+    dbConnection = mongoose.connection;
 
+    // Initialize collections
     await fetchFoodItems();
+    return dbConnection;
   } catch (error) {
     console.error("MongoDB connection error:", error);
     console.log("Not connected to MongoDB");
+    throw error;
   }
 };
 
@@ -24,9 +30,7 @@ const fetchFoodItems = async () => {
     const fetched_data = await mongoose.connection.db.collection("food_items");
     const data = await fetched_data.find({}).toArray();
 
-    const foodCategory = await mongoose.connection.db.collection(
-      "foodCategory"
-    );
+    const foodCategory = await mongoose.connection.db.collection("foodcategories");
     const catdata = await foodCategory.find({}).toArray();
 
     const ResturentUsers = await mongoose.connection.db.collection("Resturent");
@@ -39,7 +43,12 @@ const fetchFoodItems = async () => {
     console.log("Data fetched and stored in global variables successfully");
   } catch (err) {
     console.error("Error fetching data from collections:", err);
+    throw err;
   }
 };
 
-module.exports = connectDb;
+// Export the connection function and the db connection
+module.exports = {
+  connectDb,
+  getDb: () => dbConnection ? dbConnection.db : null
+};
